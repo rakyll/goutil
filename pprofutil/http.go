@@ -21,7 +21,7 @@ type labelHandler struct {
 }
 
 func (l *labelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	labels := pprof.Labels("handler", r.URL.Path)
+	labels := pprof.Labels("http.path", r.URL.Path)
 	pprof.Do(r.Context(), labels, func(ctx context.Context) {
 		l.orig.ServeHTTP(w, r)
 	})
