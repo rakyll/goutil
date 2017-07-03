@@ -16,6 +16,11 @@ func LabelHandler(h http.Handler) http.Handler {
 	return &labelHandler{orig: h}
 }
 
+// LabelHandlerFunc adds profiler labels to the given handler function.
+func LabelHandlerFunc(fn http.HandlerFunc) http.Handler {
+	return &labelHandler{orig: fn}
+}
+
 type labelHandler struct {
 	orig http.Handler
 }
