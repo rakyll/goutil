@@ -11,12 +11,12 @@ import (
 	"runtime/pprof"
 )
 
-// LabelHandler adds profiler labels to the given handler.
+// LabelHandler adds "http-path" profiler label to the given handler.
 func LabelHandler(h http.Handler) http.Handler {
 	return &labelHandler{orig: h}
 }
 
-// LabelHandlerFunc adds profiler labels to the given handler function.
+// LabelHandlerFunc adds "http-path" profiler label to the given handler function.
 func LabelHandlerFunc(fn func(w http.ResponseWriter, r *http.Request)) http.Handler {
 	return &labelHandler{orig: http.HandlerFunc(fn)}
 }
