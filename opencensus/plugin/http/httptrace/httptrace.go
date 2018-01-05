@@ -16,11 +16,16 @@
 package httptrace
 
 import (
+	"encoding/binary"
+	"encoding/hex"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"go.opencensus.io/trace"
 )
+
+const httpHeader = `X-Cloud-Trace-Context`
 
 // Transport is an http.RoundTripper that traces the outgoing requests.
 type Transport struct {
@@ -35,12 +40,12 @@ type Transport struct {
 // the request's context.
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	name := "Sent" + strings.Replace(req.URL.String(), req.URL.Scheme, ".", -1)
-	span := trace.FromContext(req.Context()).StartSpan(name)
-	req = req.WithContext(trace.WithSpan(req.Context(), span))
+	ctx := trace.StartSpan(req.Context(), name)
+	req = req.WithContext(ctx)
 	resp, err := t.base().RoundTrip(req)
 	// TODO(jbd): Add status and attributes.
 	// TODO(jbd): Propagate the context as a Stackdriver trace.
-	span.End()
+	trace.EndSpan(ctx)
 	return resp, err
 }
 
@@ -79,12 +84,80 @@ type handler struct {
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	name := "Recv" + strings.Replace(r.URL.String(), r.URL.Scheme, ".", -1)
-	ctx := trace.StartSpan(r.Context(), name)
+
+	ctx := r.Context()
+	traceID, spanID, options, _, ok := traceInfoFromHeader(r.Header.Get(httpHeader))
+	if ok {
+		ctx = trace.StartSpanWithRemoteParent(ctx, name, trace.SpanContext{
+			TraceID:      traceID,
+			SpanID:       spanID,
+			TraceOptions: options,
+		}, trace.StartSpanOptions{})
+	} else {
+		ctx = trace.StartSpan(r.Context(), name)
+	}
 	defer trace.EndSpan(ctx)
 
 	// TODO(jbd): Add status and attributes.
-	// TODO(jbd): Propagate the context as a Stackdriver trace.
-
 	r = r.WithContext(ctx)
 	h.handler.ServeHTTP(w, r)
 }
+
+func traceInfoFromHeader(h string) (traceID trace.TraceID, spanID trace.SpanID, options trace.TraceOptions, optionsOk bool, ok bool) {
+	// See https://cloud.google.com/trace/docs/faq for the header format.
+	// Return if the header is empty or missing, or if the header is unreasonably
+	// large, to avoid making unnecessary copies of a large string.
+	if h == "" || len(h) > 200 {
+		return trace.TraceID{}, trace.SpanID{}, 0, false, false
+
+	}
+
+	// Parse the trace id field.
+	slash := strings.Index(h, `/`)
+	if slash == -1 {
+		return trace.TraceID{}, trace.SpanID{}, 0, false, false
+
+	}
+	tid, h := h[:slash], h[slash+1:]
+
+	buf, err := hex.DecodeString(tid)
+	if err != nil {
+		return trace.TraceID{}, trace.SpanID{}, 0, false, false
+	}
+	for i, v := range buf {
+		traceID[i] = v
+	}
+
+	// Parse the span id field.
+	spanstr := h
+	semicolon := strings.Index(h, `;`)
+	if semicolon != -1 {
+		spanstr, h = h[:semicolon], h[semicolon+1:]
+	}
+	sid, err := strconv.ParseUint(spanstr, 10, 64)
+	if err != nil {
+		return trace.TraceID{}, trace.SpanID{}, 0, false, false
+
+	}
+
+	buf = make([]byte, 8)
+	binary.PutUvarint(buf, sid)
+	for i, v := range buf {
+		spanID[i] = v
+	}
+
+	// Parse the options field, options field is optional.
+	if !strings.HasPrefix(h, "o=") {
+		return traceID, spanID, 0, false, true
+
+	}
+	o, err := strconv.ParseUint(h[2:], 10, 64)
+	if err != nil {
+		return trace.TraceID{}, trace.SpanID{}, 0, false, false
+
+	}
+	options = trace.TraceOptions(o)
+	return traceID, spanID, options, true, true
+}
+
+type optionFlags uint32
