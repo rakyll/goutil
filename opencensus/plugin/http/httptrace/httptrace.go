@@ -138,7 +138,6 @@ func traceInfoFromHeader(h string) (traceID trace.TraceID, spanID trace.SpanID, 
 	sid, err := strconv.ParseUint(spanstr, 10, 64)
 	if err != nil {
 		return trace.TraceID{}, trace.SpanID{}, 0, false, false
-
 	}
 
 	buf = make([]byte, 8)
