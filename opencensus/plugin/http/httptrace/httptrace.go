@@ -42,9 +42,13 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	name := "Sent" + strings.Replace(req.URL.String(), req.URL.Scheme, ".", -1)
 	ctx := trace.StartSpan(req.Context(), name)
 	req = req.WithContext(ctx)
+
+	span := trace.FromContext(ctx)
+	req.Header.Set(httpHeader, spanContextToHeader(span.SpanContext()))
+
 	resp, err := t.base().RoundTrip(req)
+
 	// TODO(jbd): Add status and attributes.
-	// TODO(jbd): Propagate the context as a Stackdriver trace.
 	trace.EndSpan(ctx)
 	return resp, err
 }
@@ -109,7 +113,6 @@ func traceInfoFromHeader(h string) (traceID trace.TraceID, spanID trace.SpanID, 
 	// large, to avoid making unnecessary copies of a large string.
 	if h == "" || len(h) > 200 {
 		return trace.TraceID{}, trace.SpanID{}, 0, false, false
-
 	}
 
 	// Parse the trace id field.
@@ -160,4 +163,10 @@ func traceInfoFromHeader(h string) (traceID trace.TraceID, spanID trace.SpanID, 
 	return traceID, spanID, options, true, true
 }
 
-type optionFlags uint32
+func spanContextToHeader(sc trace.SpanContext) string {
+	traceID := hex.EncodeToString(sc.TraceID[:])
+	sid, _ := binary.Uvarint(sc.SpanID[:])
+	spanID := strconv.FormatUint(sid, 10)
+	opts := strconv.FormatInt(int64(sc.TraceOptions), 10)
+	return traceID + "/" + spanID + ";" + opts
+}
