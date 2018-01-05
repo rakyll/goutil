@@ -127,9 +127,7 @@ func traceInfoFromHeader(h string) (traceID trace.TraceID, spanID trace.SpanID, 
 	if err != nil {
 		return trace.TraceID{}, trace.SpanID{}, 0, false, false
 	}
-	for i, v := range buf {
-		traceID[i] = v
-	}
+	copy(traceID[:], buf)
 
 	// Parse the span id field.
 	spanstr := h
@@ -145,9 +143,7 @@ func traceInfoFromHeader(h string) (traceID trace.TraceID, spanID trace.SpanID, 
 
 	buf = make([]byte, 8)
 	binary.PutUvarint(buf, sid)
-	for i, v := range buf {
-		spanID[i] = v
-	}
+	copy(spanID[:], buf)
 
 	// Parse the options field, options field is optional.
 	if !strings.HasPrefix(h, "o=") {
