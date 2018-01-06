@@ -91,13 +91,9 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	name := "Recv" + strings.Replace(r.URL.String(), r.URL.Scheme, ".", -1)
 
 	ctx := r.Context()
-	traceID, spanID, options, _, ok := traceInfoFromHeader(r.Header.Get(httpHeader))
+	sc, ok := traceInfoFromHeader(r.Header.Get(httpHeader))
 	if ok {
-		ctx = trace.StartSpanWithRemoteParent(ctx, name, trace.SpanContext{
-			TraceID:      traceID,
-			SpanID:       spanID,
-			TraceOptions: options,
-		}, trace.StartSpanOptions{})
+		ctx = trace.StartSpanWithRemoteParent(ctx, name, sc, trace.StartSpanOptions{})
 	} else {
 		ctx = trace.StartSpan(r.Context(), name)
 	}
@@ -108,27 +104,27 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.handler.ServeHTTP(w, r)
 }
 
-func traceInfoFromHeader(h string) (traceID trace.TraceID, spanID trace.SpanID, options trace.TraceOptions, optionsOk bool, ok bool) {
+func traceInfoFromHeader(h string) (sc trace.SpanContext, ok bool) {
 	// See https://cloud.google.com/trace/docs/faq for the header format.
 	// Return if the header is empty or missing, or if the header is unreasonably
 	// large, to avoid making unnecessary copies of a large string.
 	if h == "" || len(h) > 200 {
-		return trace.TraceID{}, trace.SpanID{}, 0, false, false
+		return trace.SpanContext{}, false
 	}
 
 	// Parse the trace id field.
 	slash := strings.Index(h, `/`)
 	if slash == -1 {
-		return trace.TraceID{}, trace.SpanID{}, 0, false, false
+		return trace.SpanContext{}, false
 
 	}
 	tid, h := h[:slash], h[slash+1:]
 
 	buf, err := hex.DecodeString(tid)
 	if err != nil {
-		return trace.TraceID{}, trace.SpanID{}, 0, false, false
+		return trace.SpanContext{}, false
 	}
-	copy(traceID[:], buf)
+	copy(sc.TraceID[:], buf)
 
 	// Parse the span id field.
 	spanstr := h
@@ -138,25 +134,25 @@ func traceInfoFromHeader(h string) (traceID trace.TraceID, spanID trace.SpanID, 
 	}
 	sid, err := strconv.ParseUint(spanstr, 10, 64)
 	if err != nil {
-		return trace.TraceID{}, trace.SpanID{}, 0, false, false
+		return trace.SpanContext{}, false
 	}
 
 	buf = make([]byte, 8)
 	binary.PutUvarint(buf, sid)
-	copy(spanID[:], buf)
+	copy(sc.SpanID[:], buf)
 
 	// Parse the options field, options field is optional.
 	if !strings.HasPrefix(h, "o=") {
-		return traceID, spanID, 0, false, true
+		return sc, true
 
 	}
 	o, err := strconv.ParseUint(h[2:], 10, 64)
 	if err != nil {
-		return trace.TraceID{}, trace.SpanID{}, 0, false, false
+		return trace.SpanContext{}, false
 
 	}
-	options = trace.TraceOptions(o)
-	return traceID, spanID, options, true, true
+	sc.TraceOptions = trace.TraceOptions(o)
+	return sc, true
 }
 
 func spanContextToHeader(sc trace.SpanContext) string {

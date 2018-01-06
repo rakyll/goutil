@@ -18,6 +18,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"net/http"
+	"reflect"
 	"testing"
 
 	"go.opencensus.io/trace"
@@ -71,36 +72,42 @@ func TestTransport_RoundTrip(t *testing.T) {
 	}
 }
 
-func TestSpanContextToHeader(t *testing.T) {
-	var traceID [16]byte
-	binary.PutVarint(traceID[:], 100)
+func TestSpanContext(t *testing.T) {
+	traceID := [16]byte{16, 84, 69, 170, 120, 67, 188, 139, 242, 6, 177, 32, 0, 16, 0, 0}
 	var spanID [8]byte
-	binary.PutUvarint(spanID[:], 1)
+	binary.PutUvarint(spanID[:], 123)
 	tests := []struct {
-		sc   trace.SpanContext
-		want string
+		sc       trace.SpanContext
+		incoming string
 	}{
 		{
+			incoming: "105445aa7843bc8bf206b12000100000/123;o=1",
 			sc: trace.SpanContext{
 				TraceID:      traceID,
 				SpanID:       spanID,
 				TraceOptions: 1,
 			},
-			want: "c8010000000000000000000000000000/1;o=1",
 		},
 		{
+			incoming: "105445aa7843bc8bf206b12000100000/123;o=0",
 			sc: trace.SpanContext{
 				TraceID:      traceID,
 				SpanID:       spanID,
 				TraceOptions: 0,
 			},
-			want: "c8010000000000000000000000000000/1;o=0",
 		},
 	}
 	for _, tt := range tests {
-		t.Run(tt.want, func(t *testing.T) {
-			if got := spanContextToHeader(tt.sc); got != tt.want {
-				t.Errorf("spanContextToHeader() = %q, want %q", got, tt.want)
+		t.Run(tt.incoming, func(t *testing.T) {
+			spanContext, ok := traceInfoFromHeader(tt.incoming)
+			if !ok {
+				t.Errorf("traceInfoFromHeader() = false; want true")
+			}
+			if got, want := spanContext, tt.sc; !reflect.DeepEqual(got, want) {
+				t.Errorf("traceInfoFromHeader() = %v; want %v", got, want)
+			}
+			if got := spanContextToHeader(spanContext); got != tt.incoming {
+				t.Errorf("spanContextToHeader() = %q, want %q", got, tt.incoming)
 			}
 		})
 	}
