@@ -16,6 +16,7 @@
 package httptrace
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/hex"
 	"net/http"
@@ -159,9 +160,12 @@ func traceInfoFromHeader(h string) (traceID trace.TraceID, spanID trace.SpanID, 
 }
 
 func spanContextToHeader(sc trace.SpanContext) string {
-	traceID := hex.EncodeToString(sc.TraceID[:])
+	var b bytes.Buffer
+	b.WriteString(hex.EncodeToString(sc.TraceID[:]))
 	sid, _ := binary.Uvarint(sc.SpanID[:])
-	spanID := strconv.FormatUint(sid, 10)
-	opts := strconv.FormatInt(int64(sc.TraceOptions), 10)
-	return traceID + "/" + spanID + ";" + opts
+	b.WriteString("/")
+	b.WriteString(strconv.FormatUint(sid, 10))
+	b.WriteString(";o=")
+	b.WriteString(strconv.FormatInt(int64(sc.TraceOptions), 10))
+	return b.String()
 }

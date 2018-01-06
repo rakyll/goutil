@@ -15,6 +15,7 @@
 package httptrace
 
 import (
+	"encoding/binary"
 	"errors"
 	"net/http"
 	"testing"
@@ -65,6 +66,41 @@ func TestTransport_RoundTrip(t *testing.T) {
 				if got, want := span.SpanContext().TraceID, tt.parent.SpanContext().TraceID; got != want {
 					t.Errorf("span.SpanContext().TraceID=%v; want %v", got, want)
 				}
+			}
+		})
+	}
+}
+
+func TestSpanContextToHeader(t *testing.T) {
+	var traceID [16]byte
+	binary.PutVarint(traceID[:], 100)
+	var spanID [8]byte
+	binary.PutUvarint(spanID[:], 1)
+	tests := []struct {
+		sc   trace.SpanContext
+		want string
+	}{
+		{
+			sc: trace.SpanContext{
+				TraceID:      traceID,
+				SpanID:       spanID,
+				TraceOptions: 1,
+			},
+			want: "c8010000000000000000000000000000/1;o=1",
+		},
+		{
+			sc: trace.SpanContext{
+				TraceID:      traceID,
+				SpanID:       spanID,
+				TraceOptions: 0,
+			},
+			want: "c8010000000000000000000000000000/1;o=0",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			if got := spanContextToHeader(tt.sc); got != tt.want {
+				t.Errorf("spanContextToHeader() = %q, want %q", got, tt.want)
 			}
 		})
 	}
