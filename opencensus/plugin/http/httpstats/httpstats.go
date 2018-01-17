@@ -17,6 +17,30 @@ package httpstats
 
 import (
 	"net/http"
+
+	"go.opencensus.io/stats"
+)
+
+var (
+	// Available client measures
+	ClientErrorCount       *stats.MeasureInt64
+	ClientRoundTripLatency *stats.MeasureFloat64
+	ClientRequestBytes     *stats.MeasureInt64
+	ClientResponseBytes    *stats.MeasureInt64
+	ClientStartedCount     *stats.MeasureInt64
+	ClientFinishedCount    *stats.MeasureInt64
+	ClientRequestCount     *stats.MeasureInt64
+	ClientResponseCount    *stats.MeasureInt64
+
+	// Available server measures
+	ServerErrorCount    *stats.MeasureInt64
+	ServerElapsedTime   *stats.MeasureFloat64
+	ServerRequestBytes  *stats.MeasureInt64
+	ServerResponseBytes *stats.MeasureInt64
+	ServerStartedCount  *stats.MeasureInt64
+	ServerFinishedCount *stats.MeasureInt64
+	ServerRequestCount  *stats.MeasureInt64
+	ServerResponseCount *stats.MeasureInt64
 )
 
 // Transport is an http.RoundTripper that traces the outgoing requests.
